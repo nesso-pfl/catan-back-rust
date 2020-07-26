@@ -1,18 +1,41 @@
-fn main() {
-    let x = vec![1, 2, 3];
+use actix::{Actor, StreamHandler};
+use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web_actors::ws;
 
-    for n in &x {
-        println!("{}", n);
-    };
+/// Define http actor
+struct MyWs;
 
-    let y = match &x {
-        r => r,
-    };
+impl Actor for MyWs {
+    type Context = ws::WebsocketContext<Self>;
+}
 
-    let z = match &x {
-        r => r,
-    };
+/// Handler for ws::Message message
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
+    fn handle(
+        &mut self,
+        msg: Result<ws::Message, ws::ProtocolError>,
+        ctx: &mut Self::Context,
+    ) {
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Text(text)) => ctx.text(text),
+            Ok(ws::Message::Binary(bin)) => ctx.binary(bin),
+            _ => (),
+        }
+    }
+}
 
-    println!("Got {}", x[1]);
-    println!("Got {}", x[1]);
+async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+    println!("{:?}", req);
+    let resp = ws::start(MyWs {}, &req, stream);
+    println!("{:?}", resp);
+    resp
+}
+
+#[actix_rt::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| App::new().route("/ws/", web::get().to(index)))
+        .bind("127.0.0.1:8088")?
+        .run()
+        .await
 }
